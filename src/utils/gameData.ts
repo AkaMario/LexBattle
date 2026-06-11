@@ -158,11 +158,17 @@ export function normalizeWord(value: string) {
 }
 
 const LOCAL_WORD_SET = new Set(Object.values(WORD_BANK).flat().map(normalizeWord))
+const CATEGORY_WORD_SETS = Object.fromEntries(
+  Object.entries(WORD_BANK).map(([context, words]) => [
+    context,
+    new Set(words.map(normalizeWord)),
+  ]),
+) as Record<GameContext, Set<string>>
 
 export async function validateWord(
   word: string,
   letter: string,
-  _context: GameContext,
+  context: GameContext,
   usedWords: string[],
 ) {
   const normalized = normalizeWord(word)
@@ -172,6 +178,16 @@ export async function validateWord(
   if (usedWords.includes(normalized)) return { isValid: false, reason: 'Palabra repetida.' }
   if (!normalized.startsWith(expectedLetter)) {
     return { isValid: false, reason: `Debe iniciar con ${letter}.` }
+  }
+
+  if (context !== 'Libre') {
+    const categoryWords = CATEGORY_WORD_SETS[context]
+
+    if (!categoryWords.has(normalized)) {
+      return { isValid: false, reason: `No pertenece a ${context}.` }
+    }
+
+    return { isValid: true, reason: `+10 puntos · ${context} OK` }
   }
 
   if (LOCAL_WORD_SET.has(normalized)) return { isValid: true, reason: '+10 puntos · Banco local OK' }
