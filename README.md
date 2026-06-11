@@ -1,4 +1,4 @@
-# LexBattle
+# Game LexBattle
 
 ## Descripción
 
