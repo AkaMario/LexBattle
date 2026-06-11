@@ -279,6 +279,7 @@ input:disabled {
 .score-strip {
   display: flex;
   gap: 0.45rem;
+  justify-content: center;
   overflow-x: auto;
   padding-bottom: 0.1rem;
   scrollbar-width: none;
@@ -327,7 +328,7 @@ input:disabled {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.72rem;
   font-weight: 900;
-  justify-self: end;
+  justify-self: center;
   padding: 0.42rem 0.75rem;
   text-transform: uppercase;
 }
@@ -611,6 +612,14 @@ input:disabled {
 
 @media (min-width: 900px) and (min-height: 701px) {
   .play-view {
-    grid-template-rows: auto auto auto 340px auto auto auto;
+    grid-template-rows: auto auto auto 420px auto auto auto;
+  }
+
+  .table-arena {
+    min-height: 420px;
+  }
+
+  .round-table {
+    transform: translate(-50%, -50%) scale(1.22);
   }
 }

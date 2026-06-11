@@ -857,34 +857,11 @@ function App() {
                         <span
                           className={`letter-token ${letter === currentLetter ? "letter-token-active" : ""}`}
                           key={letter}
-                          style={getCircularStyle(index, LETTERS.length, 116)}
+                          style={getCircularStyle(index, LETTERS.length, 128)}
                         >
                           {letter}
                         </span>
                       ))}
-
-                      {!isSinglePlayer &&
-                        gameState.players.map((player, index) => (
-                          <div
-                            className={`player-seat ${player.errors >= MAX_ERRORS ? "player-seat-out" : ""} ${
-                              activePlayer?.id === player.id
-                                ? "player-seat-active"
-                                : ""
-                            }`}
-                            key={player.id}
-                            style={getCircularStyle(
-                              index,
-                              Math.max(gameState.players.length, 2),
-                              156,
-                            )}
-                          >
-                            <span>{player.name}</span>
-                            {activePlayer?.id === player.id && (
-                              <strong>BOMB</strong>
-                            )}
-                            {player.errors >= MAX_ERRORS && <small>OUT</small>}
-                          </div>
-                        ))}
                     </div>
                   </div>
 
