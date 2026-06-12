@@ -50,6 +50,11 @@ export const WORD_BANK: Record<GameContext, string[]> = {
     "buho",
     "buitre",
     "burro",
+    "butor",
+    "bacalao",
+    "barrilete",
+    "bicho",
+    "buey",
     // C
     "caballo",
     "cabra",
@@ -790,9 +795,7 @@ export function getAvailableLetters(context: GameContext): string[] {
   if (!words || words.size === 0) return [...LETTERS];
   return LETTERS.filter((letter) => {
     const normalizedLetter = normalizeWord(letter);
-    return Array.from(words).some((word) =>
-      word.startsWith(normalizedLetter),
-    );
+    return Array.from(words).some((word) => word.startsWith(normalizedLetter));
   });
 }
 
@@ -805,6 +808,27 @@ const CATEGORY_WORD_SETS = Object.fromEntries(
     new Set(words.map(normalizeWord)),
   ]),
 ) as Record<GameContext, Set<string>>;
+
+let citiesLoaded = false;
+
+export async function ensureCitiesLoaded(): Promise<void> {
+  if (citiesLoaded) return;
+  try {
+    const resp = await fetch("/data/ciudades.txt");
+    const text = await resp.text();
+    const lines = text.split("\n").filter(Boolean);
+    const newSet = new Set(lines.map(normalizeWord));
+    const ciudadSet = CATEGORY_WORD_SETS["Ciudades"];
+    ciudadSet.clear();
+    for (const city of newSet) {
+      ciudadSet.add(city);
+    }
+    citiesLoaded = true;
+    console.log(`Ciudades loaded: ${newSet.size} cities`);
+  } catch (err) {
+    console.warn("Failed to load ciudades data:", err);
+  }
+}
 
 export async function validateWord(
   word: string,

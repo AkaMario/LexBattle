@@ -656,3 +656,13 @@ input:disabled {
 .mute-button:hover {
   background: rgb(30 41 59 / 0.9);
 }
+
+@media (max-width: 640px) {
+  .mute-button {
+    top: auto;
+    bottom: 1rem;
+    right: 1rem;
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+}

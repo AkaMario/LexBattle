@@ -19,6 +19,7 @@ import type {
 import {
   GAME_CONTEXTS,
   LETTERS,
+  ensureCitiesLoaded,
   getAvailableLetters,
   normalizeWord,
   validateWord,
@@ -28,7 +29,7 @@ import {
   playErrorSfx,
   playSuccessSfx,
   playExplosionSfx,
-  setMuted as setAudioMuted,
+  toggleMute as toggleAudioMute,
 } from "./utils/audio";
 
 const PLAYER_STORAGE_KEY = "lexbattle-player";
@@ -469,9 +470,8 @@ function App() {
   }
 
   function handleToggleMute() {
-    const next = !isMuted;
+    const next = toggleAudioMute();
     setIsMuted(next);
-    setAudioMuted(next);
   }
 
   function triggerShake() {
@@ -534,6 +534,7 @@ function App() {
 
   useEffect(() => {
     ensureBgm();
+    ensureCitiesLoaded();
   }, []);
 
   useEffect(() => {
@@ -1004,7 +1005,7 @@ function App() {
                 </div>
               )}
 
-              {gameState.phase === "finished" && (
+                  {gameState.phase === "finished" && (
                 <div className="grid h-full content-center gap-6 text-center justify-center">
                   <p className="font-mono text-sm uppercase tracking-[0.35em] text-lime-300">
                     Game Over
@@ -1022,6 +1023,13 @@ function App() {
                       {isSinglePlayer ? "Jugar de nuevo" : "Volver al lobby"}
                     </button>
                   )}
+                  <button
+                    className="rounded-2xl border border-rose-400/50 bg-rose-500/10 px-4 py-3 font-mono text-sm font-black uppercase text-rose-200 transition hover:bg-rose-500/20 mx-auto"
+                    type="button"
+                    onClick={handleLeaveRoom}
+                  >
+                    Salir al menu
+                  </button>
                 </div>
               )}
             </div>

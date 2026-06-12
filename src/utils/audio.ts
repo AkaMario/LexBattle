@@ -29,7 +29,7 @@ export function playBgm() {
   stopBgm();
   bgmAudio = new Audio(BGM_URL);
   bgmAudio.loop = true;
-  bgmAudio.volume = 0.85;
+  bgmAudio.volume = 0.75;
   bgmAudio.play().catch(() => {});
 }
 
