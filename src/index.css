@@ -623,3 +623,36 @@ input:disabled {
     transform: translate(-50%, -50%) scale(1.22);
   }
 }
+
+@keyframes screen-shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+  20%, 40%, 60%, 80% { transform: translateX(4px); }
+}
+
+.screen-shake {
+  animation: screen-shake 0.3s ease-in-out;
+}
+
+.mute-button {
+  position: fixed;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 50;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 9999px;
+  border: 1px solid rgb(148 163 184 / 0.28);
+  background: rgb(15 23 42 / 0.86);
+  color: rgb(203 213 225);
+  font-size: 1.1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.mute-button:hover {
+  background: rgb(30 41 59 / 0.9);
+}

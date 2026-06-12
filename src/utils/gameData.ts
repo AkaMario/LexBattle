@@ -784,6 +784,18 @@ export function normalizeWord(value: string) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
+export function getAvailableLetters(context: GameContext): string[] {
+  if (context === "Libre") return [...LETTERS];
+  const words = CATEGORY_WORD_SETS[context];
+  if (!words || words.size === 0) return [...LETTERS];
+  return LETTERS.filter((letter) => {
+    const normalizedLetter = normalizeWord(letter);
+    return Array.from(words).some((word) =>
+      word.startsWith(normalizedLetter),
+    );
+  });
+}
+
 const LOCAL_WORD_SET = new Set(
   Object.values(WORD_BANK).flat().map(normalizeWord),
 );

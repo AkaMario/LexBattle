@@ -19,9 +19,17 @@ import type {
 import {
   GAME_CONTEXTS,
   LETTERS,
+  getAvailableLetters,
   normalizeWord,
   validateWord,
 } from "./utils/gameData";
+import {
+  ensureBgm,
+  playErrorSfx,
+  playSuccessSfx,
+  playExplosionSfx,
+  setMuted as setAudioMuted,
+} from "./utils/audio";
 
 const PLAYER_STORAGE_KEY = "lexbattle-player";
 const MAX_ERRORS = 3;
@@ -96,10 +104,31 @@ function getWinnerId(players: Player[]) {
   return [...players].sort((a, b) => b.score - a.score)[0]?.id;
 }
 
-function getNextLetterIndex(currentLetterIndex: number, shouldLoop: boolean) {
-  if (shouldLoop) return (currentLetterIndex + 1) % LETTERS.length;
+function getFirstAvailableLetterIndex(context: GameContext): number {
+  const available = getAvailableLetters(context);
+  return LETTERS.indexOf(available[0]);
+}
 
-  return Math.min(currentLetterIndex + 1, LETTERS.length - 1);
+function getNextLetterIndex(
+  currentLetterIndex: number,
+  shouldLoop: boolean,
+  availableLetterSet: Set<string>,
+) {
+  const total = LETTERS.length;
+
+  if (shouldLoop) {
+    for (let offset = 1; offset <= total; offset++) {
+      const candidate = (currentLetterIndex + offset) % total;
+      if (availableLetterSet.has(LETTERS[candidate])) return candidate;
+    }
+    return currentLetterIndex;
+  }
+
+  for (let i = currentLetterIndex + 1; i < total; i++) {
+    if (availableLetterSet.has(LETTERS[i])) return i;
+  }
+
+  return -1;
 }
 
 function getCircularStyle(index: number, total: number, radius: number) {
@@ -150,6 +179,8 @@ function App() {
   const [selectedContext, setSelectedContext] =
     useState<GameContext>("Animales");
   const [timeLeft, setTimeLeft] = useState(TURN_SECONDS);
+  const [isMuted, setIsMuted] = useState(false);
+  const [shaking, setShaking] = useState(false);
   const [localPlayer, setLocalPlayer] = useState<Player | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -244,6 +275,7 @@ function App() {
     const nextState = {
       ...createInitialState(roomCode, host),
       context: selectedContext,
+      currentLetterIndex: getFirstAvailableLetterIndex(selectedContext),
     };
 
     try {
@@ -251,6 +283,7 @@ function App() {
       setLocalPlayer(host);
       setGameState(nextState);
       playTone("start");
+      ensureBgm();
     } catch (error) {
       setRoomError(
         error instanceof Error ? error.message : "No se pudo crear la sala.",
@@ -266,6 +299,7 @@ function App() {
       ...createInitialState(SINGLE_PLAYER_ROOM, player),
       phase: "playing",
       context: selectedContext,
+      currentLetterIndex: getFirstAvailableLetterIndex(selectedContext),
       message:
         "Modo solo iniciado. Completa el alfabeto usando el diccionario español.",
     };
@@ -275,6 +309,7 @@ function App() {
     setLocalPlayer(player);
     setGameState(nextState);
     playTone("start");
+    ensureBgm();
   }
 
   async function handleJoinRoom() {
@@ -296,6 +331,7 @@ function App() {
       setLocalPlayer(player);
       setGameState(nextState);
       playTone("join");
+      ensureBgm();
     } catch (error) {
       setRoomError(
         error instanceof Error ? error.message : "No se pudo entrar a la sala.",
@@ -332,7 +368,7 @@ function App() {
         errors: 0,
       })),
       currentTurnIndex: 0,
-      currentLetterIndex: 0,
+      currentLetterIndex: getFirstAvailableLetterIndex(gameState.context),
       usedWords: [],
       history: [],
       roundStartedAt: Date.now(),
@@ -340,6 +376,7 @@ function App() {
       message: "La batalla comenzo. Responde antes que explote el turno.",
     });
     playTone("start");
+    ensureBgm();
   }
 
   async function handleSubmitWord() {
@@ -370,10 +407,15 @@ function App() {
         : player,
     );
     const isSinglePlayer = gameState.roomCode === SINGLE_PLAYER_ROOM;
-    const finishedByLetters =
-      isSinglePlayer &&
-      result.isValid &&
-      gameState.currentLetterIndex >= LETTERS.length - 1;
+    const nextLetterIndex = result.isValid
+      ? getNextLetterIndex(
+          gameState.currentLetterIndex,
+          !isSinglePlayer,
+          availableLetterSet,
+        )
+      : gameState.currentLetterIndex;
+    const hasCompletedAllLetters =
+      isSinglePlayer && result.isValid && nextLetterIndex === -1;
     const activePlayersCount = nextPlayers.filter(
       (player) => player.errors < MAX_ERRORS,
     ).length;
@@ -383,14 +425,14 @@ function App() {
     const nextState: GameState = {
       ...gameState,
       players: nextPlayers,
-      phase: finishedByLetters || finishedByErrors ? "finished" : "playing",
+      phase: hasCompletedAllLetters || finishedByErrors ? "finished" : "playing",
       currentTurnIndex: getNextTurnIndex(
         nextPlayers,
         gameState.currentTurnIndex,
       ),
-      currentLetterIndex: result.isValid
-        ? getNextLetterIndex(gameState.currentLetterIndex, !isSinglePlayer)
-        : gameState.currentLetterIndex,
+      currentLetterIndex: hasCompletedAllLetters
+        ? gameState.currentLetterIndex
+        : nextLetterIndex,
       usedWords: result.isValid
         ? [...gameState.usedWords, normalizedWord]
         : gameState.usedWords,
@@ -404,12 +446,12 @@ function App() {
         ...gameState.history,
       ].slice(0, 8),
       roundStartedAt: Date.now(),
-      winnerId: finishedByLetters
+      winnerId: hasCompletedAllLetters
         ? localPlayer.id
         : !isSinglePlayer && finishedByErrors
           ? getWinnerId(nextPlayers)
           : undefined,
-      message: finishedByLetters
+      message: hasCompletedAllLetters
         ? `${localPlayer.name} completo todo el abecedario.`
         : isSinglePlayer && finishedByErrors
           ? "La bomba exploto por demasiados errores. Debias completar todo el abecedario."
@@ -418,8 +460,23 @@ function App() {
 
     setWord("");
     setIsValidatingWord(false);
-    playTone(result.isValid ? "valid" : "error");
+    if (result.isValid) playSuccessSfx();
+    else {
+      playErrorSfx();
+      triggerShake();
+    }
     publishState(nextState);
+  }
+
+  function handleToggleMute() {
+    const next = !isMuted;
+    setIsMuted(next);
+    setAudioMuted(next);
+  }
+
+  function triggerShake() {
+    setShaking(true);
+    setTimeout(() => setShaking(false), 300);
   }
 
   const handleTurnTimeout = useEffectEvent(() => {
@@ -467,12 +524,17 @@ function App() {
     };
 
     setIsValidatingWord(false);
-    playTone("error");
+    playExplosionSfx();
+    triggerShake();
     publishState(nextState);
   });
 
   const gamePhase = gameState?.phase;
   const roundStartedAt = gameState?.roundStartedAt;
+
+  useEffect(() => {
+    ensureBgm();
+  }, []);
 
   useEffect(() => {
     if (gamePhase !== "playing" || !roundStartedAt) return undefined;
@@ -503,7 +565,7 @@ function App() {
           errors: 0,
         })),
         currentTurnIndex: 0,
-        currentLetterIndex: 0,
+        currentLetterIndex: getFirstAvailableLetterIndex(gameState.context),
         usedWords: [],
         history: [],
         roundStartedAt: Date.now(),
@@ -511,6 +573,7 @@ function App() {
         message:
           "Nueva partida en solitario. Completa el abecedario antes de que explote la bomba.",
       });
+      ensureBgm();
       return;
     }
 
@@ -523,7 +586,7 @@ function App() {
         errors: 0,
       })),
       currentTurnIndex: 0,
-      currentLetterIndex: 0,
+      currentLetterIndex: getFirstAvailableLetterIndex(gameState.context),
       usedWords: [],
       history: [],
       winnerId: undefined,
@@ -590,6 +653,8 @@ function App() {
     localPlayerRecord.errors >= MAX_ERRORS &&
     !isSinglePlayer,
   );
+  const availableLetters = gameState ? getAvailableLetters(gameState.context) : LETTERS;
+  const availableLetterSet = new Set(availableLetters);
   const currentLetter = gameState ? LETTERS[gameState.currentLetterIndex] : "A";
   const timerPercent = (timeLeft / TURN_SECONDS) * 100;
   const isFocusScreen =
@@ -597,8 +662,29 @@ function App() {
 
   return (
     <main
-      className={`min-h-screen bg-[#0b1026] text-slate-100 ${isFocusScreen ? "px-3 py-3 sm:px-5" : "px-4 py-6 sm:px-6 lg:px-10"}`}
+      className={`min-h-screen bg-[#0b1026] text-slate-100 ${shaking ? "screen-shake" : ""} ${isFocusScreen ? "px-3 py-3 sm:px-5" : "px-4 py-6 sm:px-6 lg:px-10"}`}
     >
+      <button
+        className="mute-button"
+        type="button"
+        onClick={handleToggleMute}
+        title={isMuted ? "Activar sonido" : "Silenciar"}
+      >
+        {isMuted ? (
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+            <line x1="23" y1="9" x2="17" y2="15" />
+            <line x1="17" y1="9" x2="23" y2="15" />
+          </svg>
+        ) : (
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+          </svg>
+        )}
+      </button>
+
       <div className="mx-auto max-w-6xl">
         {!gameState ? (
           <section className="home-screen">
@@ -853,11 +939,15 @@ function App() {
                         </div>
                       </div>
 
-                      {LETTERS.map((letter, index) => (
+                      {availableLetters.map((letter, index) => (
                         <span
                           className={`letter-token ${letter === currentLetter ? "letter-token-active" : ""}`}
                           key={letter}
-                          style={getCircularStyle(index, LETTERS.length, 128)}
+                          style={getCircularStyle(
+                            index,
+                            availableLetters.length,
+                            128,
+                          )}
                         >
                           {letter}
                         </span>
