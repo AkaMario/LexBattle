@@ -135,11 +135,58 @@ npm run build
 npm run preview
 ```
 
-## Archivos clave
+## Cómo funciona el online
 
-- `src/App.tsx`
-- `src/utils/gameData.ts`
-- `src/services/supabase/client.ts`
-- `src/services/supabase/rooms.ts`
-- `src/services/realtime/channel.ts`
-- `supabase/migrations/20260611120000_online_rooms_schema.sql`
+### Flujo de salas y sincronización
+
+1. El host crea una sala mediante `createOnlineRoom`.
+   - Se crea un perfil de invitado en `profiles` si el jugador no existe.
+   - Se inserta una fila en `games` con el `room_code`, `host_id`, contexto, turno actual y letra actual.
+   - El estado inicial de la partida se guarda en `room_states` en formato JSON.
+2. Un jugador entra a la sala con `joinOnlineRoom`.
+   - Se crea su perfil de invitado en `profiles`.
+   - Se recupera el estado de la sala desde `room_states`.
+   - Se inserta o actualiza su registro en `players` para dejar trazabilidad y posición.
+   - Se guarda el estado actualizado en `room_states`.
+3. Todos los jugadores conectados escuchan el canal Realtime `lexbattle:<roomCode>`.
+   - El canal se crea con `createRoomChannel`.
+   - El host y los jugadores reciben eventos `game-event`.
+   - Cuando el cliente publica un evento de estado, `broadcastGameEvent` lo envía al resto de participantes.
+4. Cada vez que cambia el estado del juego, se persiste en la base de datos con `saveRoomState`.
+   - Actualiza `room_states` con el objeto `GameState` completo.
+   - Actualiza `games` con información de turno, letra y estado de la partida.
+
+### Tablas clave usadas para el online
+
+- `profiles`:
+  - Guarda jugadores invitados.
+  - Permite referenciar `host_id` y `current_turn` en `games`.
+- `games`:
+  - Guarda la partida activa y su estado básico.
+  - Contiene `room_code`, `status`, `context`, `current_turn`, `current_letter` y `current_letter_index`.
+- `players`:
+  - Guarda el estado individual de cada jugador en una partida.
+  - Contiene `score`, `errors`, `position` y `is_online`.
+- `room_states`:
+  - Guarda el `GameState` completo en JSON.
+  - Es la fuente de verdad para recuperación de sala y sincronización inicial.
+
+### Por qué usar Supabase
+
+- Realtime: la comunicación en vivo entre jugadores se hace con canales de Supabase.
+- Autenticación liviana: se usan perfiles de invitados con `profiles`.
+- Persistencia rápida: el estado de las salas se guarda en `room_states` y permite reanudar o sincronizar nuevos jugadores.
+- Escalabilidad simple: la lógica de la app actual no necesita backend personalizado, solo lectura/escritura a Postgres y Realtime.
+
+### Ejemplo de uso en la app
+
+- `App.tsx` crea y actualiza el estado global cada vez que un jugador envía una palabra.
+- `src/services/supabase/rooms.ts` gestiona:
+  - `createOnlineRoom`
+  - `joinOnlineRoom`
+  - `saveRoomState`
+- `src/services/realtime/channel.ts` gestiona los eventos:
+  - `createRoomChannel`
+  - `broadcastGameEvent`
+
+De esta forma, la sala existe como dato persistente en Postgres y también como flujo en vivo entre clientes conectados.
